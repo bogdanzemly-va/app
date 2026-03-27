@@ -12,8 +12,8 @@ jobs:
       - name: Test Python
         run: |
           cd service-py
-          pip install -r requirements.txt --quiet
-          python -m py_compile app.py && echo "Syntax OK"
+          pip3 install -r requirements.txt --quiet
+          python3 -m py_compile app.py && echo "Syntax OK"
 
   test-go:
     runs-on: self-hosted
@@ -22,7 +22,7 @@ jobs:
       - name: Test Go
         run: |
           cd service-go
-          go build ./...
+          /usr/local/go/bin/go build ./...
 
   build-py:
     runs-on: self-hosted
