@@ -1,0 +1,67 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test-py:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test Python
+        run: |
+          cd service-py
+          pip install -r requirements.txt --quiet
+          python -m py_compile app.py && echo "Syntax OK"
+
+  test-go:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test Go
+        run: |
+          cd service-go
+          go build ./...
+
+  build-py:
+    runs-on: self-hosted
+    needs: test-py
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build and push Python image
+        run: |
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -t zema1309/service-py:${{ github.sha }} ./service-py
+          docker push zema1309/service-py:${{ github.sha }}
+          docker tag zema1309/service-py:${{ github.sha }} zema1309/service-py:latest
+          docker push zema1309/service-py:latest
+
+  build-go:
+    runs-on: self-hosted
+    needs: test-go
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build and push Go image
+        run: |
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -t zema1309/service-go:${{ github.sha }} ./service-go
+          docker push zema1309/service-go:${{ github.sha }}
+          docker tag zema1309/service-go:${{ github.sha }} zema1309/service-go:latest
+          docker push zema1309/service-go:latest
+
+  update-infra:
+    runs-on: self-hosted
+    needs: [build-py, build-go]
+    steps:
+      - name: Update infra repo
+        run: |
+          rm -rf /tmp/infra
+          git clone https://bogdanzemly-va:${{ secrets.GH_TOKEN }}@github.com/bogdanzemly-va/infra.git /tmp/infra
+          cd /tmp/infra
+          git config user.email "bogdan.zemly@gmail.com"
+          git config user.name "bogdanzemly-va"
+          sed -i "s/tag:.*/tag:\ \"${{ github.sha }}\"/" service-py/values.yaml
+          sed -i "s/tag:.*/tag:\ \"${{ github.sha }}\"/" service-go/values.yaml
+          git commit -am "Update image tag to ${{ github.sha }}"
+          git push
