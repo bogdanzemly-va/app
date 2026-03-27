@@ -1,0 +1,66 @@
+stages:
+  - test
+  - build
+  - update
+
+test-py:
+  stage: test
+  tags:
+    - vm
+  script:
+    - cd service-py
+    - pip install -r requirements.txt --quiet
+    - python -m py_compile app.py && echo "Syntax OK"
+
+test-go:
+  stage: test
+  tags:
+    - vm
+  script:
+    - cd service-go
+    - go build ./...
+
+build-py:
+  stage: build
+  tags:
+    - vm
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  script:
+    - docker build -t zema1309/service-py:$CI_COMMIT_SHA ./service-py
+    - docker push zema1309/service-py:$CI_COMMIT_SHA
+    - docker tag zema1309/service-py:$CI_COMMIT_SHA zema1309/service-py:latest
+    - docker push zema1309/service-py:latest
+  only:
+    - main
+
+build-go:
+  stage: build
+  tags:
+    - vm
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  script:
+    - docker build -t zema1309/service-go:$CI_COMMIT_SHA ./service-go
+    - docker push zema1309/service-go:$CI_COMMIT_SHA
+    - docker tag zema1309/service-go:$CI_COMMIT_SHA zema1309/service-go:latest
+    - docker push zema1309/service-go:latest
+  only:
+    - main
+
+update-infra:
+  stage: update
+  tags:
+    - vm
+  script:
+    - rm -rf /tmp/infra
+    - git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/bogdan.zemly/infra.git /tmp/infra
+    - cd /tmp/infra
+    - git config user.email "bogdan.zemly@gmail.com"
+    - git config user.name "bogdan.zemly"
+    - sed -i "s/tag:.*/tag:\ \"${CI_COMMIT_SHA}\"/" service-py/values.yaml
+    - sed -i "s/tag:.*/tag:\ \"${CI_COMMIT_SHA}\"/" service-go/values.yaml
+    - git commit -am "Update image tag to ${CI_COMMIT_SHA}"
+    - git push
+  only:
+    - main
