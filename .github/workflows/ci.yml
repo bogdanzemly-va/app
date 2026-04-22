@@ -64,3 +64,37 @@ jobs:
           sed -i "s/tag:.*/tag:\ \"${{ github.sha }}\"/" service-go/values.yaml
           git commit -am "Update image tag to ${{ github.sha }}"
           git push
+
+  notify-success:
+    runs-on: self-hosted
+    needs: update-infra
+    if: success()
+    steps:
+      - name: Send Telegram notification
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          MESSAGE="✅ *Деплой успешен*%0A%0AРепозиторий: \`${{ github.repository }}\`%0AКоммит: \`${SHORT_SHA}\`%0AАвтор: ${{ github.actor }}%0AСообщение: ${{ github.event.head_commit.message }}%0A%0AОбразы обновлены и Flux применит изменения в течение минуты."
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --proxy "http://10.8.0.27:1080" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=${MESSAGE}" \
+            -d "parse_mode=Markdown"
+
+  notify-failure:
+    runs-on: self-hosted
+    needs: [test-py, test-go, build-py, build-go, update-infra]
+    if: failure()
+    steps:
+      - name: Send Telegram failure notification
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          MESSAGE="❌ *Деплой упал*%0A%0AРепозиторий: \`${{ github.repository }}\`%0AКоммит: \`${SHORT_SHA}\`%0AАвтор: ${{ github.actor }}%0AСообщение: ${{ github.event.head_commit.message }}%0A%0AПроверь логи: https://github.com/${{ github.repository }}/actions"
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --proxy "http://10.8.0.27:1080" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=${MESSAGE}" \
+            -d "parse_mode=Markdown"
